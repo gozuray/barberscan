@@ -1,0 +1,229 @@
+// BarberScan — production Prisma schema
+// Designed for: multi-tenant barbershops, usage quotas, Stripe billing,
+// auditability, and analytics.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+//  IDENTITY
+// ─────────────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  STYLIST
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  clerkId      String   @unique
+  email        String   @unique
+  name         String?
+  imageUrl     String?
+  role         Role     @default(OWNER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shopId       String?
+  shop         Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  subscription Subscription?
+  analyses     Analysis[]
+  usageEvents  UsageEvent[]
+  clients      Client[]
+
+  @@index([shopId])
+}
+
+model Shop {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  analyses    Analysis[]
+  clients     Client[]
+}
+
+// ─────────────────────────────────────────────────────────
+//  BILLING (Stripe-synced via webhooks)
+// ─────────────────────────────────────────────────────────
+
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  STUDIO
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String             @unique
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stripeCustomerId       String?            @unique
+  stripeSubscriptionId   String?            @unique
+  stripePriceId          String?
+
+  tier                   PlanTier           @default(FREE)
+  status                 SubscriptionStatus @default(TRIALING)
+
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  trialEndsAt            DateTime?
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([stripeCustomerId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  CLIENT BOOK (barber's customers)
+// ─────────────────────────────────────────────────────────
+
+model Client {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId     String?
+  shop       Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  name       String?
+  phone      String?
+  email      String?
+  notes      String?  @db.Text
+
+  analyses   Analysis[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([shopId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  ANALYSIS (the core domain object)
+// ─────────────────────────────────────────────────────────
+
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SuitabilityTag {
+  BEST_MATCH    // green check
+  GOOD_MATCH    // green check
+  NEUTRAL       // yellow minus
+  NOT_IDEAL     // red X
+}
+
+model Analysis {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId        String?
+  shop          Shop?          @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  clientId      String?
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  status        AnalysisStatus @default(PENDING)
+  errorMessage  String?
+
+  // Original photo
+  originalUrl   String
+  originalKey   String?        // storage key for deletion
+
+  // Face + hair insights (populated by NanoBananaPRO analysis step)
+  faceShape     String?        // "Oval", "Round", "Square", etc.
+  hairType      String?        // "Straight / Thick", "Curly", etc.
+  hairDensity   String?        // "Medium - High", etc.
+  skinTone      String?
+  insightsJson  Json?          // raw analysis payload for future use
+
+  // Generated style variants
+  variants      StyleVariant[]
+
+  // Denormalized for fast list queries
+  bestMatchIds  String[]       @default([])
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  completedAt   DateTime?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([shopId])
+  @@index([clientId])
+}
+
+model StyleVariant {
+  id             String          @id @default(cuid())
+  analysisId     String
+  analysis       Analysis        @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  styleKey       String          // e.g., "textured_crop"
+  styleName      String          // e.g., "Textured Crop"
+  imageUrl       String
+  imageKey       String?
+
+  matchScore     Int             // 0-100
+  suitability    SuitabilityTag
+  explanation    String          @db.Text
+
+  promptUsed     String?         @db.Text
+  generationMs   Int?
+
+  createdAt      DateTime        @default(now())
+
+  @@index([analysisId])
+}
+
+// ─────────────────────────────────────────────────────────
+//  USAGE LEDGER (append-only for quotas + analytics)
+// ─────────────────────────────────────────────────────────
+
+enum UsageKind {
+  ANALYSIS_CREATED
+  STYLE_GENERATED
+  EXPORT_PDF
+  PRESENTATION_OPENED
+}
+
+model UsageEvent {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind       UsageKind
+  amount     Int       @default(1)
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}

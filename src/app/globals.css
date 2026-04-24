@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Luxury grooming palette — warm cream + charcoal + muted gold */
+    --background: 38 35% 97%;     /* brand.cream */
+    --foreground: 240 6% 8%;      /* brand.ink */
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 8%;
+
+    --primary: 240 6% 8%;         /* ink — buttons/CTA */
+    --primary-foreground: 38 40% 97%;
+
+    --secondary: 36 31% 87%;      /* sand */
+    --secondary-foreground: 240 6% 8%;
+
+    --muted: 36 25% 92%;
+    --muted-foreground: 240 5% 40%;
+
+    --accent: 36 50% 54%;         /* muted gold */
+    --accent-foreground: 240 6% 8%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 36 20% 85%;
+    --input: 36 20% 85%;
+    --ring: 36 50% 54%;
+
+    --radius: 0.9rem;
+  }
+
+  .dark {
+    --background: 240 8% 7%;
+    --foreground: 38 30% 94%;
+
+    --card: 240 7% 10%;
+    --card-foreground: 38 30% 94%;
+    --popover: 240 7% 10%;
+    --popover-foreground: 38 30% 94%;
+
+    --primary: 38 30% 94%;
+    --primary-foreground: 240 8% 7%;
+
+    --secondary: 240 6% 16%;
+    --secondary-foreground: 38 30% 94%;
+
+    --muted: 240 6% 14%;
+    --muted-foreground: 38 10% 65%;
+
+    --accent: 36 50% 54%;
+    --accent-foreground: 240 8% 7%;
+
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 6% 18%;
+    --input: 240 6% 18%;
+    --ring: 36 50% 54%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+}
+
+@layer components {
+  .card-surface {
+    @apply rounded-2xl border border-border bg-card shadow-soft;
+  }
+  .gold-pill {
+    @apply inline-flex items-center gap-1 rounded-full bg-brand-beige/60 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-brand-ink;
+  }
+  .divider-dot::before {
+    content: "·";
+    @apply mx-2 text-muted-foreground;
+  }
+}
