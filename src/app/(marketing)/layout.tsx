@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
+import { DEV_NO_AUTH } from "@/lib/dev-mode";
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,19 +20,27 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <Link href="/pricing" className="hover:text-foreground">Pricing</Link>
           </nav>
           <div className="flex items-center gap-3">
-            <SignedOut>
-              <Link href="/sign-in" className="text-sm text-muted-foreground hover:text-foreground">
-                Sign in
-              </Link>
-              <Button asChild size="sm" variant="gold">
-                <Link href="/sign-up">Start free trial</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
+            {DEV_NO_AUTH ? (
               <Button asChild size="sm">
-                <Link href="/dashboard">Dashboard</Link>
+                <Link href="/dashboard">Open Dashboard (dev)</Link>
               </Button>
-            </SignedIn>
+            ) : (
+              <>
+                <SignedOut>
+                  <Link href="/sign-in" className="text-sm text-muted-foreground hover:text-foreground">
+                    Sign in
+                  </Link>
+                  <Button asChild size="sm" variant="gold">
+                    <Link href="/sign-up">Start free trial</Link>
+                  </Button>
+                </SignedOut>
+                <SignedIn>
+                  <Button asChild size="sm">
+                    <Link href="/dashboard">Dashboard</Link>
+                  </Button>
+                </SignedIn>
+              </>
+            )}
           </div>
         </div>
       </header>

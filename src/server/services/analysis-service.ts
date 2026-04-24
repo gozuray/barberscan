@@ -7,6 +7,8 @@ import {
   type HairstyleKey,
   type OutputAspectRatio,
 } from "@/lib/nanobanana/types";
+import { USE_CUSTOM_PROMPT } from "@/lib/dev-mode";
+import { CUSTOM_HAIRSTYLE_PROMPT, CUSTOM_STYLE_NAME } from "@/lib/ai/custom-prompt";
 import { SuitabilityTag, type Analysis, type Client } from "@prisma/client";
 
 type StartInput = {
@@ -121,6 +123,50 @@ async function runPipeline(
     where: { id: analysisId },
     data: { status: "PROCESSING" },
   });
+
+  // ── TEST MODE ───────────────────────────────────────────────────────────
+  // When `AI_USE_CUSTOM_PROMPT=true`, skip the 8-style loop and face-analysis
+  // call entirely: send exactly one image-generation request using the prompt
+  // from `src/lib/ai/custom-prompt.ts`. Lets you iterate quickly on wording
+  // and see the raw model output in the app.
+  if (USE_CUSTOM_PROMPT) {
+    const started = Date.now();
+    const gen = await provider.generateHairstyle({
+      imageUrl: analysis.originalUrl,
+      styleKey: "textured_crop",
+      prompt: CUSTOM_HAIRSTYLE_PROMPT,
+      aspectRatio: options.aspectRatio,
+    });
+
+    const variant = await db.styleVariant.create({
+      data: {
+        analysisId,
+        styleKey: "textured_crop",
+        styleName: CUSTOM_STYLE_NAME,
+        imageUrl: gen.imageUrl,
+        matchScore: 100,
+        suitability: "BEST_MATCH",
+        explanation: "Custom test prompt output.",
+        promptUsed: CUSTOM_HAIRSTYLE_PROMPT,
+        generationMs: gen.generationMs ?? Date.now() - started,
+      },
+    });
+
+    await db.analysis.update({
+      where: { id: analysisId },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        bestMatchIds: [variant.id],
+      },
+    });
+
+    await db.usageEvent.create({
+      data: { userId: analysis.userId, kind: "STYLE_GENERATED" },
+    });
+
+    return;
+  }
 
   // 1. Face & hair insights
   const insights = await provider.analyzeFace({ imageUrl: analysis.originalUrl });

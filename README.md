@@ -13,6 +13,43 @@ Built on **Next.js 15 (App Router) · TypeScript · TailwindCSS · Prisma · Pos
 - **Client gallery** — Per-client page with a mosaic of generated looks, fullscreen **9:16** viewer, native **share to gallery** (mobile share sheet + “Save to Photos”), optional **public share link** (`/share/<token>`) with download.
 - **Dual AI engines** — Default **NanoBananaPRO**; optional **OpenAI** path (vision analysis + image generation) for A/B testing. Provider is stored on each `Analysis` row (`aiProvider`, `aspectRatio`).
 - **Billing & quotas** — Stripe subscriptions, plan tiers, usage events.
+- **Local dev & AI experiments** — Optional **no-Clerk** mode, **single-image custom prompt** pipeline, and an **`/admin-test`** page to compare **OpenAI** (`images/edits`) vs **Nano Banana Pro gateway** or **Gemini** (when `NANOBANANA_API_KEY` is an `AIza…` key). See [Local development & AI testing](#local-development--ai-testing).
+
+---
+
+## Local development & AI testing
+
+### Environment flags (`.env.local`)
+
+| Variable | Purpose |
+|----------|---------|
+| `LOCAL_DEV_NO_AUTH=true` | Bypasses Clerk and middleware protection; visiting `/dashboard` auto-creates a single **Local Dev** user. The new-analysis form can use a **paste image URL** path so UploadThing is not required for smoke tests. **Never enable in production.** |
+| `AI_USE_CUSTOM_PROMPT=true` | Skips the default face-analysis + eight-style loop. The pipeline sends **one** prompt from `src/lib/ai/custom-prompt.ts` to the active provider (`AI_PROVIDER`) and stores the result like a normal analysis. Useful for iterating on prompts and models. |
+
+### Custom prompt (`src/lib/ai/custom-prompt.ts`)
+
+- **`CUSTOM_HAIRSTYLE_PROMPT`** — Default text is tuned for **identity-preserving hair edits**: change only the hairstyle, keep the same face, glasses, facial hair, clothing, background, and lighting. It includes a **`[HAIRSTYLE]`** placeholder replaced at runtime (admin-test) or you can embed a fixed description in the string for the dashboard pipeline.
+- **`POPULAR_HAIRSTYLES`** — Curated English descriptions used by the admin-test UI as quick picks.
+- **`CUSTOM_STYLE_NAME`** — Label for the custom style in test mode.
+
+**Why one hairstyle per image:** Asking a single model call for a 2×2 “hairstyle chart” collage usually **re-synthesizes different faces** in each cell. For consistent identity, generate **one look per request** (or generate four images and compose the grid in your own UI).
+
+### Admin test page — `/admin-test`
+
+- Upload a portrait, choose **OpenAI** or **Nano Banana Pro** (see keys below), edit the prompt, pick or type a **hairstyle** (replaces `[HAIRSTYLE]`), and run **Probar API**.
+- **OpenAI** uses `POST /v1/images/edits` with `OPENAI_IMAGE_MODEL` (default `gpt-image-1`).
+- **Nano** uses `POST /api/admin-test/openai` (filename kept for compatibility), which calls `generateNanoBananaProImage` in `src/lib/nanobanana/bananapro-gateway.ts`.
+
+> **Security:** `/admin-test` and its API route are **not** behind Clerk in the default middleware matcher. Treat them as **dev-only**; remove the routes or add auth before shipping a public production build.
+
+### NanoBananaPRO vs Gemini (same env var, different key shape)
+
+| `NANOBANANA_API_KEY` prefix | Behavior |
+|-----------------------------|----------|
+| `sk-…` | **Nano Banana Pro** async gateway at `NANOBANANA_BASE_URL` (default `https://gateway.bananapro.site/api`): `POST /v1/images/generate` → poll `GET /v1/images/{task_id}`. |
+| `AIza…` | **Google Gemini** `generateContent` on `generativelanguage.googleapis.com` with `NANOBANANA_MODEL` (e.g. `gemini-3-pro-image-preview`) and optional `NANOBANANA_GEMINI_IMAGE_SIZE` (`512` \| `1K` \| `2K` \| `4K`). If `NANOBANANA_BASE_URL` points at the Banana gateway, it is **ignored** for Gemini unless it explicitly contains `generativelanguage.googleapis.com`. |
+
+Face analysis for the legacy Nano client falls back to **OpenAI vision** when `OPENAI_API_KEY` is set, or to safe defaults otherwise (gateway docs do not expose the old `/analyze/face` endpoint).
 
 ---
 
@@ -26,6 +63,7 @@ src/
 │   ├── (app)/dashboard/          # Authenticated SaaS (clients, analyses, billing)
 │   ├── present/[id]/             # Fullscreen client-presentation mode
 │   ├── share/[token]/           # Public shared hairstyle (no auth)
+│   ├── admin-test/              # Dev-only: compare OpenAI vs Nano/Gemini (protect in prod)
 │   └── api/
 │       ├── analyze/             # Start pipeline (+ provider override)
 │       ├── analyze/[id]/        # Poll analysis status
@@ -35,6 +73,7 @@ src/
 │       ├── share/[token]/download  # Public download by token
 │       ├── uploadthing/         # Presigned uploads
 │       ├── billing/             # Checkout + portal
+│       ├── admin-test/openai/   # Dev image generation (OpenAI edits or Nano/Gemini)
 │       └── webhooks/            # Clerk + Stripe
 ├── components/
 │   ├── ui/                      # ShadCN-style primitives
@@ -42,15 +81,16 @@ src/
 │   ├── clients/                 # Client gallery + inline actions
 │   └── billing/
 ├── lib/
-│   ├── ai/                      # Provider registry (NanoBanana · OpenAI)
-│   ├── nanobanana/              # Legacy vendor client + prompts + types
+│   ├── ai/                      # Provider registry + `custom-prompt.ts` (test / custom pipeline)
+│   ├── nanobanana/              # Gateway client, bananapro-gateway (Nano + Gemini), types
+│   ├── dev-mode.ts              # LOCAL_DEV_NO_AUTH + AI_USE_CUSTOM_PROMPT flags
 │   ├── stripe/
 │   ├── auth/
 │   └── db.ts, utils.ts, plans.ts, ratelimit.ts
 ├── server/services/
 │   ├── analysis-service.ts      # Pipeline: client allocation → analyze → 8 styles → score
 │   └── download.ts              # Stream remote images as attachment downloads
-└── middleware.ts                # Clerk protection (public: /share, /api/share)
+└── middleware.ts                # Clerk protection unless `LOCAL_DEV_NO_AUTH=true` (public: /share, /api/share)
 ```
 
 ### Request flow — New analysis
@@ -95,11 +135,12 @@ Copy `.env.example` to `.env.local` and fill every value.
 | Group | Variables |
 |-------|-----------|
 | App | `NEXT_PUBLIC_APP_URL` (production domain; used for Stripe return URLs and share links) |
+| Local dev (optional) | `LOCAL_DEV_NO_AUTH`, `AI_USE_CUSTOM_PROMPT` — see [Local development & AI testing](#local-development--ai-testing) |
 | Database | `DATABASE_URL`, `DIRECT_URL` |
 | Auth | `NEXT_PUBLIC_CLERK_*`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET` |
 | Stripe | `STRIPE_*`, `STRIPE_PRICE_*`, webhook secret |
 | AI — routing | `AI_PROVIDER` = `nanobanana` \| `openai` (default when request omits `provider`) |
-| NanoBananaPRO | `NANOBANANA_API_KEY`, `NANOBANANA_BASE_URL`, `NANOBANANA_TIMEOUT_MS` |
+| NanoBananaPRO | `NANOBANANA_API_KEY` (`sk-…` for Nano Banana Pro gateway, or `AIza…` for Gemini), `NANOBANANA_BASE_URL` (gateway default `https://gateway.bananapro.site/api`; Gemini uses `generativelanguage.googleapis.com` automatically for `AIza…`), optional `NANOBANANA_MODEL` + `NANOBANANA_GEMINI_IMAGE_SIZE`, `NANOBANANA_TIMEOUT_MS` (gateway task polling budget) |
 | OpenAI (optional, for A/B) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ANALYSIS_MODEL` (e.g. `gpt-5.5`), `OPENAI_IMAGE_MODEL` (e.g. `gpt-image-1`), `OPENAI_TIMEOUT_MS` |
 | Storage | `UPLOADTHING_TOKEN`, `UPLOADTHING_SECRET` |
 | Redis | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
@@ -182,11 +223,12 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe
 
 ## GitHub & deployment
 
-1. **Push to GitHub** (this repo is intended to live on GitHub for CI and Vercel import).
+1. **Push to GitHub** — Do not commit `.env.local` or `.env` (they are gitignored). Stage source and config templates only, then push your branch (e.g. `main`).
 
    ```bash
+   git status
    git add -A
-   git commit -m "Your message"
+   git commit -m "Describe your change"
    git push origin main
    ```
 

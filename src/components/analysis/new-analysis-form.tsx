@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Upload, Sparkles, AlertTriangle } from "lucide-react";
+import { Upload, Sparkles, AlertTriangle, Link2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { UploadDropzone } from "@/lib/uploadthing";
 import { Button } from "@/components/ui/button";
@@ -25,12 +25,25 @@ const PROVIDERS: Array<{ id: ProviderId; label: string; description: string }> =
   },
 ];
 
-export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
+type Props = {
+  quota: QuotaStatus;
+  /** When true, show a "paste image URL" fallback for local testing without UploadThing. */
+  allowPasteUrl?: boolean;
+  /**
+   * When true, the backend will ignore the 8-style loop and send one custom
+   * prompt instead (see `src/lib/ai/custom-prompt.ts`). We also force the
+   * OpenAI provider because the prompt targets GPT-5.5.
+   */
+  customPromptMode?: boolean;
+};
+
+export function NewAnalysisForm({ quota, allowPasteUrl, customPromptMode }: Props) {
   const router = useRouter();
   const { toast } = useToast();
-  const [uploaded, setUploaded] = useState<{ url: string; key: string } | null>(null);
+  const [uploaded, setUploaded] = useState<{ url: string; key?: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [provider, setProvider] = useState<ProviderId>("nanobanana");
+  const [provider, setProvider] = useState<ProviderId>(customPromptMode ? "openai" : "nanobanana");
+  const [pastedUrl, setPastedUrl] = useState("");
 
   const quotaReached = Number.isFinite(quota.limit) && quota.remaining <= 0;
 
@@ -63,6 +76,18 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
     }
   }
 
+  function handlePastedUrl() {
+    const trimmed = pastedUrl.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed);
+    } catch {
+      toast({ variant: "destructive", title: "That doesn't look like a URL" });
+      return;
+    }
+    setUploaded({ url: trimmed });
+  }
+
   if (quotaReached) {
     return (
       <div className="card-surface flex items-start gap-4 p-6">
@@ -83,7 +108,7 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
   return (
     <div className="space-y-6">
       {!uploaded ? (
-        <div className="card-surface p-6">
+        <div className="card-surface space-y-4 p-6">
           <UploadDropzone
             endpoint="clientPhoto"
             className="ut-button:bg-brand-ink ut-button:text-brand-cream ut-button:rounded-full ut-label:text-foreground ut-allowed-content:text-muted-foreground border-2 border-dashed border-border bg-brand-cream/40 p-10 rounded-2xl"
@@ -104,6 +129,29 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
               ),
             }}
           />
+
+          {allowPasteUrl ? (
+            <div className="rounded-xl border border-dashed border-border bg-white/60 p-4">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <Link2 className="h-3.5 w-3.5" /> Local dev · paste image URL
+              </div>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Skip UploadThing for quick testing. Paste any publicly-reachable image URL (https).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="url"
+                  value={pastedUrl}
+                  onChange={(e) => setPastedUrl(e.target.value)}
+                  placeholder="https://example.com/photo.jpg"
+                  className="flex-1 min-w-[240px] rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand-ink"
+                />
+                <Button type="button" onClick={handlePastedUrl} variant="outline">
+                  Use this URL
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <motion.div
@@ -112,12 +160,21 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
           className="card-surface grid gap-6 p-6 md:grid-cols-[220px_1fr] md:items-center"
         >
           <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-muted">
-            <Image src={uploaded.url} alt="Uploaded" fill className="object-cover" sizes="220px" />
+            <Image
+              src={uploaded.url}
+              alt="Uploaded"
+              fill
+              className="object-cover"
+              sizes="220px"
+              unoptimized
+            />
           </div>
           <div className="space-y-4">
             <h3 className="font-display text-xl">Photo looks great</h3>
             <p className="text-sm text-muted-foreground">
-              We'll analyze face shape, hair type and density, then generate 8 hairstyle previews in 9:16 phone format. This typically takes 45–90 seconds.
+              {customPromptMode
+                ? "Test mode active: we'll send your custom prompt to GPT-5.5 once and display the result below."
+                : "We'll analyze face shape, hair type and density, then generate 8 hairstyle previews in 9:16 phone format. This typically takes 45–90 seconds."}
             </p>
 
             <div className="space-y-2">

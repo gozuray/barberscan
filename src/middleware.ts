@@ -1,3 +1,4 @@
+import { NextResponse, type NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isProtectedRoute = createRouteMatcher([
@@ -10,11 +11,17 @@ const isProtectedRoute = createRouteMatcher([
   "/api/variants(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const DEV_NO_AUTH = process.env.LOCAL_DEV_NO_AUTH === "true";
+
+const devPassthrough = (_req: NextRequest) => NextResponse.next();
+
+const clerkHandler = clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
     await auth.protect();
   }
 });
+
+export default DEV_NO_AUTH ? devPassthrough : clerkHandler;
 
 export const config = {
   matcher: [

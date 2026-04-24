@@ -11,6 +11,7 @@ import {
 import { getCurrentUser } from "@/lib/auth/session";
 import { getQuotaStatus } from "@/lib/auth/quota";
 import { Progress } from "@/components/ui/progress";
+import { DEV_NO_AUTH } from "@/lib/dev-mode";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -73,8 +74,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="flex h-16 items-center justify-between border-b border-border/60 bg-white/70 px-6 backdrop-blur">
           <div className="text-sm text-muted-foreground">
             Welcome back, <span className="font-medium text-foreground">{user.name ?? user.email}</span>
+            {DEV_NO_AUTH ? (
+              <span className="ml-3 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-amber-900">
+                Local Dev
+              </span>
+            ) : null}
           </div>
-          <UserButton afterSignOutUrl="/" />
+          {DEV_NO_AUTH ? (
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-ink text-xs font-semibold text-brand-cream">
+              D
+            </div>
+          ) : (
+            <UserButton afterSignOutUrl="/" />
+          )}
         </header>
         <main className="flex-1 overflow-y-auto p-6 md:p-10">{children}</main>
       </div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Fraunces } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "@/components/ui/toaster";
+import { DEV_NO_AUTH } from "@/lib/dev-mode";
 import "./globals.css";
 
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -27,6 +28,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const shell = (
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${sans.variable} ${display.variable} font-sans`}>
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+
+  if (DEV_NO_AUTH) return shell;
+
   return (
     <ClerkProvider
       appearance={{
@@ -38,12 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         },
       }}
     >
-      <html lang="en" suppressHydrationWarning>
-        <body className={`${sans.variable} ${display.variable} font-sans`}>
-          {children}
-          <Toaster />
-        </body>
-      </html>
+      {shell}
     </ClerkProvider>
   );
 }

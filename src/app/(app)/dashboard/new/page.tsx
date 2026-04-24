@@ -2,6 +2,7 @@ import { NewAnalysisForm } from "@/components/analysis/new-analysis-form";
 import { requireUser } from "@/lib/auth/session";
 import { getQuotaStatus } from "@/lib/auth/quota";
 import { Badge } from "@/components/ui/badge";
+import { DEV_NO_AUTH, USE_CUSTOM_PROMPT } from "@/lib/dev-mode";
 
 export default async function NewAnalysisPage() {
   const user = await requireUser();
@@ -15,10 +16,16 @@ export default async function NewAnalysisPage() {
           Upload your client's photo
         </h1>
         <p className="mt-2 text-muted-foreground">
-          A clear, front-facing photo works best. We'll generate 8 hairstyle previews in about a minute.
+          {USE_CUSTOM_PROMPT
+            ? "Test mode: we'll send exactly one prompt from src/lib/ai/custom-prompt.ts to the AI and show the result."
+            : "A clear, front-facing photo works best. We'll generate 8 hairstyle previews in about a minute."}
         </p>
       </div>
-      <NewAnalysisForm quota={quota} />
+      <NewAnalysisForm
+        quota={quota}
+        allowPasteUrl={DEV_NO_AUTH}
+        customPromptMode={USE_CUSTOM_PROMPT}
+      />
     </div>
   );
 }
