@@ -5,6 +5,8 @@
   "description": "BarberScan — AI hairstyle simulation SaaS for barbershops",
   "scripts": {
     "dev": "next dev --turbo",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",

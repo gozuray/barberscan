@@ -120,17 +120,46 @@ Copy `.env.example` to `.env.local` and fill every value.
 ```bash
 npm install
 cp .env.example .env.local
-# edit .env.local — do not commit secrets
+# edit .env.local with your real Clerk, Stripe, UploadThing, Upstash, and AI keys
 ```
 
-### 3. Database
+### 3. Database (local)
+
+**Option A — Docker (recommended on your machine)**  
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose).
+
+```bash
+npm run db:up          # starts PostgreSQL 16 on localhost:5432
+```
+
+Create a **`.env`** file in the project root (gitignored) with **only** the two URLs Prisma CLI reads — copy the same `DATABASE_URL` and `DIRECT_URL` you use in `.env.local`. The repo ships `docker-compose.yml` with user `barberscan` / password `barberscan` / database `barberscan`:
+
+```env
+DATABASE_URL="postgresql://barberscan:barberscan@localhost:5432/barberscan?schema=public"
+DIRECT_URL="postgresql://barberscan:barberscan@localhost:5432/barberscan?schema=public"
+```
+
+Then apply the schema:
 
 ```bash
 npm run db:push
 npm run db:studio   # optional
 ```
 
-### 4. Stripe (one time)
+Stop Postgres when finished: `npm run db:down`.
+
+**Option B — Hosted Postgres**  
+Use Neon, Supabase, or any Postgres URL. Put `DATABASE_URL` and `DIRECT_URL` in **both** `.env.local` (Next.js) and `.env` (Prisma CLI), then `npm run db:push`.
+
+### 4. Run the app locally
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:3000**. The dashboard and APIs need valid Clerk, DB, Redis, UploadThing, and AI keys; the marketing pages work with fewer secrets.
+
+### 5. Stripe (one time)
 
 Create three Products with **monthly** and **yearly** prices (Starter / Pro / Studio). Copy Price IDs into `STRIPE_PRICE_*`.
 
@@ -144,17 +173,10 @@ Local:
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
 
-### 5. Clerk
+### 6. Clerk
 
 - Allow `http://localhost:3000` (and production URL).
 - Webhook `/api/webhooks/clerk` → `user.created`, `user.updated`, `user.deleted` → `CLERK_WEBHOOK_SECRET`.
-
-### 6. Run
-
-```bash
-npm run dev
-# http://localhost:3000
-```
 
 ---
 
@@ -200,6 +222,8 @@ npm run dev
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Dev server (Turbopack) |
+| `npm run db:up` | Start local Postgres (`docker compose up -d`) |
+| `npm run db:down` | Stop local Postgres (`docker compose down`) |
 | `npm run build` | Production build (`prisma generate` + `next build`) |
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint (configure project ESLint if prompted) |

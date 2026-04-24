@@ -1,0 +1,17 @@
+# Local PostgreSQL for BarberScan development.
+# Usage: npm run db:up  →  then: npm run db:push
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: barberscan
+      POSTGRES_PASSWORD: barberscan
+      POSTGRES_DB: barberscan
+    volumes:
+      - barberscan_pgdata:/var/lib/postgresql/data
+
+volumes:
+  barberscan_pgdata:
