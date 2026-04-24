@@ -8,13 +8,29 @@ import { motion } from "framer-motion";
 import { UploadDropzone } from "@/lib/uploadthing";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
+import { cn } from "@/lib/utils";
 import type { QuotaStatus } from "@/lib/auth/quota";
+
+type ProviderId = "nanobanana" | "openai";
+const PROVIDERS: Array<{ id: ProviderId; label: string; description: string }> = [
+  {
+    id: "nanobanana",
+    label: "NanoBananaPRO",
+    description: "Default engine — fast, tuned for barbering.",
+  },
+  {
+    id: "openai",
+    label: "ChatGPT 5.5",
+    description: "OpenAI's latest vision + image editing stack.",
+  },
+];
 
 export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
   const router = useRouter();
   const { toast } = useToast();
   const [uploaded, setUploaded] = useState<{ url: string; key: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [provider, setProvider] = useState<ProviderId>("nanobanana");
 
   const quotaReached = Number.isFinite(quota.limit) && quota.remaining <= 0;
 
@@ -25,7 +41,12 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: uploaded.url, imageKey: uploaded.key }),
+        body: JSON.stringify({
+          imageUrl: uploaded.url,
+          imageKey: uploaded.key,
+          provider,
+          aspectRatio: "9:16",
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,14 +111,43 @@ export function NewAnalysisForm({ quota }: { quota: QuotaStatus }) {
           animate={{ opacity: 1, y: 0 }}
           className="card-surface grid gap-6 p-6 md:grid-cols-[220px_1fr] md:items-center"
         >
-          <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-muted">
+          <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-muted">
             <Image src={uploaded.url} alt="Uploaded" fill className="object-cover" sizes="220px" />
           </div>
           <div className="space-y-4">
             <h3 className="font-display text-xl">Photo looks great</h3>
             <p className="text-sm text-muted-foreground">
-              We'll analyze face shape, hair type and density, then generate 8 hairstyle previews. This typically takes 45–90 seconds.
+              We'll analyze face shape, hair type and density, then generate 8 hairstyle previews in 9:16 phone format. This typically takes 45–90 seconds.
             </p>
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                AI engine
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PROVIDERS.map((p) => {
+                  const active = provider === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setProvider(p.id)}
+                      disabled={submitting}
+                      className={cn(
+                        "rounded-xl border px-3 py-2 text-left transition",
+                        active
+                          ? "border-brand-ink bg-brand-ink/[0.04] shadow-soft"
+                          : "border-border hover:bg-muted",
+                      )}
+                    >
+                      <div className="text-sm font-semibold">{p.label}</div>
+                      <div className="text-xs text-muted-foreground">{p.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-3">
               <Button onClick={submit} disabled={submitting} size="lg" variant="gold">
                 {submitting ? (

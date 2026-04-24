@@ -29,10 +29,20 @@ export type HairstyleKey =
   | "messy_fringe"
   | "longer_wavy";
 
+/**
+ * Output aspect ratios supported across providers. BarberScan renders results
+ * in a phone-portrait 9:16 frame by default so they display cleanly both in
+ * the mosaic and in the fullscreen viewer.
+ */
+export type OutputAspectRatio = "9:16" | "4:5" | "1:1";
+
+export const DEFAULT_OUTPUT_ASPECT_RATIO: OutputAspectRatio = "9:16";
+
 export type StyleGenerationInput = {
   imageUrl: string;
   styleKey: HairstyleKey;
   prompt: string;
+  aspectRatio?: OutputAspectRatio;
   analysis?: FaceAnalysisResult; // helps the model stay consistent with the subject
 };
 

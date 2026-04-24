@@ -1,11 +1,13 @@
 import { db } from "@/lib/db";
-import {
-  analyzeFace,
-  generateHairstyle,
-} from "@/lib/nanobanana/client";
+import { getProvider } from "@/lib/ai";
 import { STYLE_CATALOG, buildPrompt, DEFAULT_STYLE_KEYS } from "@/lib/nanobanana/prompts";
-import type { HairstyleKey, FaceAnalysisResult } from "@/lib/nanobanana/types";
-import { SuitabilityTag, type Analysis } from "@prisma/client";
+import {
+  DEFAULT_OUTPUT_ASPECT_RATIO,
+  type FaceAnalysisResult,
+  type HairstyleKey,
+  type OutputAspectRatio,
+} from "@/lib/nanobanana/types";
+import { SuitabilityTag, type Analysis, type Client } from "@prisma/client";
 
 type StartInput = {
   userId: string;
@@ -14,33 +16,82 @@ type StartInput = {
   clientId?: string;
   shopId?: string;
   styleKeys?: HairstyleKey[];
+  /** AI provider override — otherwise uses `AI_PROVIDER` env or default. */
+  providerId?: string;
+  aspectRatio?: OutputAspectRatio;
 };
+
+/**
+ * Atomically allocates the next sequential client number for a barber and
+ * creates a default-named Client ("Cliente N"). The counter is monotonic:
+ * deleting a client never reuses its number.
+ */
+async function allocateDefaultClient(
+  userId: string,
+  shopId?: string,
+): Promise<Client> {
+  const { clientCounter } = await db.user.update({
+    where: { id: userId },
+    data: { clientCounter: { increment: 1 } },
+    select: { clientCounter: true },
+  });
+
+  return db.client.create({
+    data: {
+      userId,
+      shopId,
+      clientNumber: clientCounter,
+      name: `Cliente ${clientCounter}`,
+    },
+  });
+}
 
 /**
  * Creates a new analysis row and kicks off the generation pipeline.
  * The pipeline runs in the same request for simplicity, but is designed
  * so it can be moved to a background worker (Inngest/QStash/Trigger.dev)
  * without changing the callers — just replace `runPipeline` with an enqueue.
+ *
+ * If no `clientId` is provided, a new default-named Client is allocated so
+ * every analysis always lives inside a client entry in the barber's gallery.
  */
 export async function startAnalysis(input: StartInput): Promise<Analysis> {
+  let clientId = input.clientId;
+  if (!clientId) {
+    const created = await allocateDefaultClient(input.userId, input.shopId);
+    clientId = created.id;
+  }
+
+  const provider = getProvider(input.providerId);
+  const aspectRatio = input.aspectRatio ?? DEFAULT_OUTPUT_ASPECT_RATIO;
+
   const analysis = await db.analysis.create({
     data: {
       userId: input.userId,
       originalUrl: input.originalUrl,
       originalKey: input.originalKey,
-      clientId: input.clientId,
+      clientId,
       shopId: input.shopId,
       status: "PENDING",
+      aiProvider: provider.id,
+      aspectRatio,
     },
   });
 
   await db.usageEvent.create({
-    data: { userId: input.userId, kind: "ANALYSIS_CREATED" },
+    data: {
+      userId: input.userId,
+      kind: "ANALYSIS_CREATED",
+      metadata: { providerId: provider.id, aspectRatio },
+    },
   });
 
   // Fire-and-forget (caller should `await` only if they want to block).
   // In production, swap for: await enqueuePipeline(analysis.id)
-  runPipeline(analysis.id, input.styleKeys ?? DEFAULT_STYLE_KEYS).catch(async (err) => {
+  runPipeline(analysis.id, input.styleKeys ?? DEFAULT_STYLE_KEYS, {
+    providerId: provider.id,
+    aspectRatio,
+  }).catch(async (err) => {
     console.error("[analysis-pipeline] failed", { id: analysis.id, err });
     await db.analysis.update({
       where: { id: analysis.id },
@@ -54,14 +105,25 @@ export async function startAnalysis(input: StartInput): Promise<Analysis> {
   return analysis;
 }
 
-async function runPipeline(analysisId: string, styleKeys: HairstyleKey[]) {
+type PipelineOptions = {
+  providerId: string;
+  aspectRatio: OutputAspectRatio;
+};
+
+async function runPipeline(
+  analysisId: string,
+  styleKeys: HairstyleKey[],
+  options: PipelineOptions,
+) {
+  const provider = getProvider(options.providerId);
+
   const analysis = await db.analysis.update({
     where: { id: analysisId },
     data: { status: "PROCESSING" },
   });
 
   // 1. Face & hair insights
-  const insights = await analyzeFace({ imageUrl: analysis.originalUrl });
+  const insights = await provider.analyzeFace({ imageUrl: analysis.originalUrl });
 
   await db.analysis.update({
     where: { id: analysisId },
@@ -77,11 +139,12 @@ async function runPipeline(analysisId: string, styleKeys: HairstyleKey[]) {
   // 2. Generate all hairstyle variants in parallel (with bounded concurrency)
   const results = await mapWithConcurrency(styleKeys, 3, async (styleKey) => {
     const def = STYLE_CATALOG[styleKey];
-    const prompt = buildPrompt(styleKey, insights);
-    const gen = await generateHairstyle({
+    const prompt = buildPrompt(styleKey, insights, options.aspectRatio);
+    const gen = await provider.generateHairstyle({
       imageUrl: analysis.originalUrl,
       styleKey,
       prompt,
+      aspectRatio: options.aspectRatio,
       analysis: insights,
     });
 

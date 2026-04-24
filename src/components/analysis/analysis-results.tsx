@@ -193,7 +193,7 @@ function VariantCard({ variant, delay }: { variant: StyleVariant; delay: number 
       transition={{ delay, duration: 0.3 }}
       className="card-surface overflow-hidden"
     >
-      <div className="relative aspect-[4/5] bg-muted">
+      <div className="relative aspect-[9/16] bg-muted">
         <Image src={variant.imageUrl} alt={variant.styleName} fill className="object-cover" sizes="(min-width:768px) 200px, 45vw" />
       </div>
       <div className="flex items-center justify-between gap-2 bg-brand-sand/70 px-3 py-2">

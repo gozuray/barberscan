@@ -68,7 +68,7 @@ export default async function DashboardPage() {
                 href={`/dashboard/analyses/${a.id}`}
                 className="card-surface group overflow-hidden transition hover:shadow-luxe"
               >
-                <div className="relative aspect-[4/5] bg-muted">
+                <div className="relative aspect-[9/16] bg-muted">
                   <Image
                     src={a.variants[0]?.imageUrl ?? a.originalUrl}
                     alt="Analysis"

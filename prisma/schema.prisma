@@ -35,6 +35,10 @@ model User {
   shopId       String?
   shop         Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
+  // Monotonic counter for auto-named clients ("Cliente 1", "Cliente 2", ...).
+  // Never decremented: deleting a client does not reuse its number.
+  clientCounter Int     @default(0)
+
   subscription Subscription?
   analyses     Analysis[]
   usageEvents  UsageEvent[]
@@ -112,6 +116,10 @@ model Client {
   shopId     String?
   shop       Shop?    @relation(fields: [shopId], references: [id], onDelete: SetNull)
 
+  // Sequential number assigned at creation time, scoped per barber.
+  // Used to render default names like "Cliente 3".
+  clientNumber Int?
+
   name       String?
   phone      String?
   email      String?
@@ -122,6 +130,7 @@ model Client {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@unique([userId, clientNumber])
   @@index([userId])
   @@index([shopId])
 }
@@ -160,7 +169,12 @@ model Analysis {
   originalUrl   String
   originalKey   String?        // storage key for deletion
 
-  // Face + hair insights (populated by NanoBananaPRO analysis step)
+  // Which AI provider produced this analysis (for A/B comparison).
+  // Values: "nanobanana" | "openai" (see src/lib/ai/index.ts)
+  aiProvider    String?
+  aspectRatio   String?        // "9:16" (default) · allows future experimentation
+
+  // Face + hair insights (populated by the analysis step)
   faceShape     String?        // "Oval", "Round", "Square", etc.
   hairType      String?        // "Straight / Thick", "Curly", etc.
   hairDensity   String?        // "Medium - High", etc.
@@ -180,6 +194,7 @@ model Analysis {
   @@index([userId, createdAt(sort: Desc)])
   @@index([shopId])
   @@index([clientId])
+  @@index([aiProvider])
 }
 
 model StyleVariant {
@@ -198,6 +213,10 @@ model StyleVariant {
 
   promptUsed     String?         @db.Text
   generationMs   Int?
+
+  // Lazily generated public share token. When present, anyone with the link
+  // can view (and download) this single generated photo at /share/<token>.
+  shareToken     String?         @unique
 
   createdAt      DateTime        @default(now())
 

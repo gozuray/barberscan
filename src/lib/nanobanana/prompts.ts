@@ -1,4 +1,4 @@
-import type { FaceAnalysisResult, HairstyleKey } from "./types";
+import type { FaceAnalysisResult, HairstyleKey, OutputAspectRatio } from "./types";
 
 /**
  * Catalog of supported hairstyles. The `promptTemplate` is consumed by
@@ -16,6 +16,24 @@ export type StyleDefinition = {
 };
 
 const identityGuard = `Preserve the subject's facial features, skin tone, eye color, jawline, and expression exactly. Do not change the background. Natural studio lighting. Professional portrait quality. The output must look like the SAME person, only the hair is modified.`;
+
+/**
+ * Shared composition instructions appended to every style prompt so the
+ * generated output is always a clean vertical phone-frame shot, ready for
+ * mobile viewing and sharing without cropping.
+ */
+const PORTRAIT_FRAMING_BY_RATIO: Record<OutputAspectRatio, string> = {
+  "9:16":
+    "Compose the image as a vertical 9:16 phone-format portrait (1080x1920). Subject centered and fully visible from the top of the head to the collarbone, head-and-shoulders framing, slight negative space above the hair. No letterboxing, no black bars, no cropping of the top of the head.",
+  "4:5":
+    "Compose the image as a 4:5 portrait (1024x1280). Head-and-shoulders framing, subject centered, no cropping of the top of the head.",
+  "1:1":
+    "Compose the image as a 1:1 square. Tight head-and-shoulders framing, subject centered, no cropping of the top of the head.",
+};
+
+function portraitFraming(aspect: OutputAspectRatio): string {
+  return PORTRAIT_FRAMING_BY_RATIO[aspect];
+}
 
 export const STYLE_CATALOG: Record<HairstyleKey, StyleDefinition> = {
   textured_crop: {
@@ -98,7 +116,8 @@ export const DEFAULT_STYLE_KEYS: HairstyleKey[] = [
 export function buildPrompt(
   styleKey: HairstyleKey,
   analysis?: FaceAnalysisResult,
+  aspectRatio: OutputAspectRatio = "9:16",
 ): string {
   const def = STYLE_CATALOG[styleKey];
-  return def.promptTemplate({ analysis });
+  return `${def.promptTemplate({ analysis })} ${portraitFraming(aspectRatio)}`;
 }

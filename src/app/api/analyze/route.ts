@@ -13,6 +13,8 @@ const BodySchema = z.object({
   imageUrl: z.string().url(),
   imageKey: z.string().optional(),
   clientId: z.string().optional(),
+  provider: z.enum(["nanobanana", "openai"]).optional(),
+  aspectRatio: z.enum(["9:16", "4:5", "1:1"]).optional(),
   styleKeys: z
     .array(
       z.enum([
@@ -52,6 +54,8 @@ export async function POST(req: Request) {
       clientId: body.clientId,
       shopId: user.shopId ?? undefined,
       styleKeys: body.styleKeys ?? DEFAULT_STYLE_KEYS,
+      providerId: body.provider,
+      aspectRatio: body.aspectRatio,
     });
 
     return NextResponse.json({ id: analysis.id, status: analysis.status });

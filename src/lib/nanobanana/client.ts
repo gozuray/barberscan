@@ -143,11 +143,14 @@ export async function generateHairstyle(
 ): Promise<StyleGenerationResult> {
   type Raw = { image_url: string; generation_ms?: number };
   const start = Date.now();
+  const aspectRatio = input.aspectRatio ?? "9:16";
   const raw = await http<Raw>("/generate/hairstyle", {
     body: {
       image_url: input.imageUrl,
       prompt: input.prompt,
       style_key: input.styleKey,
+      aspect_ratio: aspectRatio,
+      size: aspectRatio === "9:16" ? "1080x1920" : aspectRatio === "4:5" ? "1024x1280" : "1024x1024",
       analysis: input.analysis
         ? {
             face_shape: input.analysis.faceShape,
