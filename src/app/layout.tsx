@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Fraunces } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "@/components/ui/toaster";
+import { clerkAppearance } from "@/lib/clerk-appearance";
 import { DEV_NO_AUTH } from "@/lib/dev-mode";
 import "./globals.css";
 
@@ -40,16 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   if (DEV_NO_AUTH) return shell;
 
   return (
-    <ClerkProvider
-      appearance={{
-        variables: {
-          colorPrimary: "#0B0B0C",
-          colorBackground: "#FAF7F1",
-          borderRadius: "0.9rem",
-          fontFamily: "var(--font-sans)",
-        },
-      }}
-    >
+    <ClerkProvider appearance={clerkAppearance}>
       {shell}
     </ClerkProvider>
   );
